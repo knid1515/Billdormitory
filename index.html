@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมพิมพ์บิลหอพัก V4</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --primary-color: #ff9a9e; }
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f0f4f8;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh;
+        }
+
+        /* ปุ่มควบคุม */
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .btn {
+            border: none; padding: 10px 20px; font-size: 16px;
+            border-radius: 20px; cursor: pointer; transition: 0.2s;
+            font-family: 'Sarabun', sans-serif; display: flex; align-items: center; gap: 5px;
+        }
+        .btn-print { background-color: var(--primary-color); color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-add { background-color: #a1c4fd; color: white; }
+        .btn-png { background-color: #84fab0; color: #333; }
+        .btn-help { background-color: #ffd194; color: #333; }
+        .btn:hover { opacity: 0.8; transform: scale(1.05); }
+
+        /* กระดาษบิล */
+        .receipt-container {
+            background-color: #fff; width: 800px; padding: 40px;
+            border: 2px solid #000; box-sizing: border-box;
+            position: relative; box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .header-left h1 { font-size: 32px; margin: 0; }
+        .header-left p { margin: 5px 0 0 0; }
+        .header-right { text-align: right; }
+        .header-right p { margin: 2px 0; }
+        .original-box { border: 3px solid #000; padding: 5px 20px; font-weight: bold; display: inline-block; margin-top: 10px; }
+
+        .room-info { border: 1px dashed #000; padding: 10px; margin-bottom: 15px; }
+
+        /* ตาราง */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th, td { border: 1px solid #000; padding: 10px; font-size: 16px; }
+        th { background-color: #f2f2f2; }
+        .col-amount { text-align: right; width: 150px; }
+        .col-action { text-align: center; width: 40px; border-left: none; }
+
+        /* ไอคอนลบ */
+        .btn-delete {
+            color: #ff4d4d; cursor: pointer; font-size: 18px;
+            transition: 0.2s; display: inline-block;
+        }
+        .btn-delete:hover { transform: scale(1.2); }
+
+        .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; }
+        .total-amount { font-size: 22px; font-weight: bold; }
+
+        /* Editable */
+        [contenteditable="true"] { outline: none; transition: 0.3s; padding: 0 2px; }
+        [contenteditable="true"]:focus { background-color: #fff0f5; border-bottom: 1px solid var(--primary-color); }
+
+        /* Loading & Toast */
+        .loader-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); display: none;
+            flex-direction: column; justify-content: center; align-items: center; z-index: 9999;
+        }
+        .bouncing-dots { display: flex; gap: 8px; margin-bottom: 10px; }
+        .dot { width: 12px; height: 12px; background: var(--primary-color); border-radius: 50%; animation: bounce 0.5s infinite alternate; }
+        .dot:nth-child(2) { animation-delay: 0.1s; background-color: #fecfef; }
+        .dot:nth-child(3) { animation-delay: 0.2s; background-color: #a1c4fd; }
+        @keyframes bounce { to { transform: translateY(-10px); } }
+
+        .toast {
+            position: fixed; bottom: 20px; background: #333; color: #fff;
+            padding: 10px 20px; border-radius: 25px; opacity: 0; transition: 0.4s;
+            pointer-events: none; z-index: 1000;
+        }
+
+        /* Modal คำแนะนำ */
+        .modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0;
+            width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5);
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background-color: #fff; padding: 30px; border-radius: 15px;
+            width: 80%; max-width: 600px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .close-btn {
+            position: absolute; top: 15px; right: 20px; color: #aaa;
+            font-size: 28px; font-weight: bold; cursor: pointer;
+        }
+        .close-btn:hover { color: #333; }
+
+        /* App Footer */
+        .app-footer {
+            margin-top: auto; padding-top: 30px; padding-bottom: 10px;
+            font-size: 14px; color: #666; text-align: center;
+        }
+        .app-footer a { color: var(--primary-color); text-decoration: none; font-weight: bold; }
+        .app-footer a:hover { text-decoration: underline; }
+
+        /* สำหรับการพิมพ์ */
+        @media print {
+            .controls, .col-action, .btn-delete, .toast, .loader-overlay, .app-footer { display: none !important; }
+            body { padding: 0; background: #fff; }
+            .receipt-container { border: none; box-shadow: none; width: 100%; padding: 0; }
+            th.col-action, td.col-action { border: none !important; }
+            [contenteditable="true"]:focus { border: none; background-color: transparent; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button class="btn btn-add" onclick="addRow()">➕ เพิ่มรายการ</button>
+        <button class="btn btn-png" onclick="downloadPNG()">🖼️ บันทึกรูป (PNG)</button>
+        <button class="btn btn-print" onclick="handlePrint()">🖨️ พิมพ์บิล</button>
+        <button class="btn btn-help" onclick="openHelp()">❓ คำแนะนำ</button>
+    </div>
+
+    <div class="receipt-container" id="receipt">
+        <div class="header">
+            <div class="header-left">
+                <h1 contenteditable="true">หอพักภัณฑิลา</h1>
+                <p contenteditable="true">18/9 ถ.ซอยโรงพิมพ์ ต.ศีรษะจรเข้ใหญ่ อ.บางเสาธง จ.สมุทรปราการ 10570</p>
+            </div>
+            <div class="header-right">
+                <p>วันที่: <span contenteditable="true" id="currentDate"></span></p>
+                <p>เลขที่: <span contenteditable="true" id="billNumber" style="font-family: monospace; font-size: 15px;"></span></p>
+                <div class="original-box">ต้นฉบับ</div>
+            </div>
+        </div>
+
+        <div class="room-info">
+            ห้อง: <span contenteditable="true" id="roomName">P309</span> | 
+            ประจำเดือน: <span contenteditable="true">เม.ย. 2569</span>
+        </div>
+
+        <table id="billTable">
+            <thead>
+                <tr>
+                    <th>รายการ</th>
+                    <th>จำนวนเงิน (บาท)</th>
+                    <th class="col-action"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td contenteditable="true">ค่าเช่าห้อง</td>
+                    <td contenteditable="true" class="col-amount amount-input">2,500.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+                <tr>
+                    <td contenteditable="true">ค่าไฟ (3834-3837) [3 หน่วย]</td>
+                    <td contenteditable="true" class="col-amount amount-input">100.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+                <tr>
+                    <td contenteditable="true">ค่าน้ำ (756-757) [1 หน่วย]</td>
+                    <td contenteditable="true" class="col-amount amount-input">100.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+                <tr>
+                    <td contenteditable="true">ส่วนกลาง</td>
+                    <td contenteditable="true" class="col-amount amount-input">100.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+                <tr>
+                    <td contenteditable="true">ค่าขยะ</td>
+                    <td contenteditable="true" class="col-amount amount-input">40.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+                <tr>
+                    <td contenteditable="true">อื่น ๆ</td>
+                    <td contenteditable="true" class="col-amount amount-input">0.00</td>
+                    <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer">
+            <div class="total-amount">
+                ยอดรวม: <span id="totalDisplay">2,840.00</span> บาท
+            </div>
+            <div style="text-align: center; width: 250px;">
+                <div style="border-bottom: 1px solid #000; height: 20px; margin-bottom: 10px;"></div>
+                <div contenteditable="true" style="font-weight: bold;">นางสาวจุฑารัตน์ ปริสัญญู</div>
+                <div>ผู้รับเงิน</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-footer">
+        © 2026 โปรแกรมพิมพ์บิลหอพัก | พัฒนาโดย <a href="https://krunidblogger.blogspot.com/" target="_blank">กฤตัชญ์ วัฒนชาต ทัศนศร</a> | สำนักตักศิลา
+    </div>
+
+    <div class="loader-overlay" id="loader">
+        <div class="bouncing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="font-family: 'Sarabun'; font-size: 18px; font-weight: bold; color: #555;">กำลังเตรียมเอกสาร...</div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeHelp()">&times;</span>
+            <h2 style="margin-top: 0; color: #ff9a9e;">❓ คำแนะนำการใช้งาน</h2>
+            <ul style="line-height: 1.8; font-size: 16px;">
+                <li><strong>การแก้ไขข้อมูล:</strong> คุณสามารถคลิกที่ข้อความใดๆ บนบิล (เช่น ชื่อหอพัก, วันที่, จำนวนเงิน) เพื่อพิมพ์แก้ไขข้อมูลได้โดยตรง</li>
+                <li><strong>ยอดรวมอัตโนมัติ:</strong> เมื่อคุณแก้ไขตัวเลขในช่อง "จำนวนเงิน (บาท)" ระบบจะคำนวณยอดรวมด้านล่างให้ใหม่ทันที</li>
+                <li><strong>เพิ่ม/ลบ รายการ:</strong> 
+                    <ul>
+                        <li>กดปุ่ม <strong>"➕ เพิ่มรายการ"</strong> เพื่อเพิ่มแถวใหม่ในตาราง</li>
+                        <li>กดไอคอน <strong>"🗑️"</strong> ท้ายแถวที่ต้องการ เพื่อลบรายการนั้นทิ้ง</li>
+                    </ul>
+                </li>
+                <li><strong>พิมพ์บิล (Print):</strong> กดปุ่ม <strong>"🖨️ พิมพ์บิล"</strong> เพื่อสั่งปริ้นท์ลงกระดาษ (ปุ่มควบคุมต่างๆ จะถูกซ่อนอัตโนมัติ)</li>
+                <li><strong>บันทึกเป็นรูปภาพ (PNG):</strong> กดปุ่ม <strong>"🖼️ บันทึกรูป (PNG)"</strong> ระบบจะแคปหน้าจอบิลและตั้งชื่อไฟล์ตามชื่อที่ระบุในช่อง "ห้อง" (เช่น ห้อง P309 จะได้ไฟล์ชื่อ บิล_P309.png)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // สร้างวันที่และเลขที่บิลอัตโนมัติ
+        function autoGenerateDateTime() {
+            const now = new Date();
+            const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+            const day = now.getDate();
+            const month = thaiMonths[now.getMonth()];
+            const yearTH = now.getFullYear() + 543;
+            document.getElementById('currentDate').textContent = `${day} ${month} พ.ศ. ${yearTH}`;
+            
+            const pad = (num) => String(num).padStart(2, '0');
+            const autoBillNumber = `${yearTH}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+            document.getElementById('billNumber').textContent = autoBillNumber;
+        }
+
+        // แจ้งเตือน Popup นุ่มนวล
+        let toastTimer;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.opacity = '1';
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+        }
+
+        // ลบแถว
+        function deleteRow(btn) {
+            const row = btn.parentNode.parentNode;
+            row.remove();
+            calculateTotal();
+            showToast("ลบรายการเรียบร้อย");
+        }
+
+        // เพิ่มแถวใหม่
+        function addRow() {
+            const tbody = document.querySelector("#billTable tbody");
+            const newRow = document.createElement("tr");
+            newRow.innerHTML = `
+                <td contenteditable="true">รายการใหม่</td>
+                <td contenteditable="true" class="col-amount amount-input">0.00</td>
+                <td class="col-action"><span class="btn-delete" onclick="deleteRow(this)" title="ลบรายการ">🗑️</span></td>
+            `;
+            tbody.appendChild(newRow);
+            calculateTotal();
+            showToast("เพิ่มรายการใหม่แล้ว");
+        }
+
+        // คำนวณยอดรวมอัตโนมัติ
+        function calculateTotal() {
+            let total = 0;
+            const amounts = document.querySelectorAll(".amount-input");
+            amounts.forEach(cell => {
+                let val = cell.textContent.replace(/,/g, '');
+                let num = parseFloat(val) || 0;
+                total += num;
+            });
+            document.getElementById("totalDisplay").textContent = total.toLocaleString('en-US', {
+                minimumFractionDigits: 2, maximumFractionDigits: 2
+            });
+        }
+
+        // ตรวจจับการพิมพ์เงินเพื่ออัปเดตยอด
+        document.querySelector("#billTable").addEventListener("input", function(e) {
+            if (e.target.classList.contains("amount-input")) { calculateTotal(); }
+        });
+
+        // Effect แจ้งเตือนตอนกดแก้ไข
+        document.addEventListener('focusin', function(e) {
+            if (e.target.hasAttribute('contenteditable')) { showToast("✨ กำลังแก้ไขข้อมูล"); }
+        });
+
+        // เปิดหน้า Print
+        function handlePrint() {
+            const loader = document.getElementById('loader');
+            loader.style.display = 'flex';
+            setTimeout(() => {
+                loader.style.display = 'none';
+                window.print();
+            }, 1000);
+        }
+
+        // ดาวน์โหลดเป็น PNG
+        function downloadPNG() {
+            const receipt = document.getElementById('receipt');
+            const roomText = document.getElementById('roomName').textContent.trim();
+            // ดึงเฉพาะคำแรก (เช่น P309) เพื่อตั้งชื่อไฟล์
+            const safeRoomName = roomText.split(' ')[0] || 'Room'; 
+            
+            showToast("⏳ กำลังสร้างรูปภาพ...");
+            
+            // ใช้ html2canvas แคปเจอร์ #receipt
+            html2canvas(receipt, { scale: 2 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `บิล_${safeRoomName}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                showToast("✅ บันทึกรูปภาพสำเร็จ!");
+            }).catch(err => {
+                showToast("❌ เกิดข้อผิดพลาดในการบันทึกภาพ");
+            });
+        }
+
+        // จัดการ Modal คำแนะนำ
+        const modal = document.getElementById("helpModal");
+        function openHelp() { modal.style.display = "flex"; }
+        function closeHelp() { modal.style.display = "none"; }
+        // ปิดเมื่อคลิกพื้นที่ว่าง
+        window.onclick = function(event) {
+            if (event.target == modal) { closeHelp(); }
+        }
+
+        // ทำงานเมื่อโหลดหน้าเว็บเสร็จ
+        window.onload = function() {
+            autoGenerateDateTime();
+            calculateTotal();
+        };
+    </script>
+</body>
+</html>
